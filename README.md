@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go)](https://golang.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?logo=typescript)](https://www.typescriptlang.org)
+[![Fly.io](https://img.shields.io/badge/Deploy-Fly.io-7856FF?logo=flydotio)](https://fly.io)
 [![Status](https://img.shields.io/badge/Status-Active_Development-brightgreen.svg)]()
 
 > **Eliminating the 5% risk that stops enterprise CTOs from deploying AI-modernized backends to production.**
@@ -13,14 +13,12 @@
 
 ## ⚡ The Problem
 
-Enterprises are rushing to modernize mission-critical legacy backends (Java 7/8 Spring monoliths, Python 2 Django, PHP 5.6 backends) into modern cloud-native services (Go, TypeScript/Node, FastAPI) using AI code migration engines.
+Enterprises are actively modernizing mission-critical legacy backends (Java 7/8 Spring monoliths, Python 2 Django, PHP 5.6 backends) into modern cloud-native services (Go, TypeScript/Node, FastAPI) using AI code migration engines.
 
-While AI generates 95% of refactored code seamlessly, **the remaining 5% of hidden edge cases make production deployment an unacceptable risk**:
+While AI generates ~95% of refactored code accurately, **the remaining 5% of hidden edge cases make production deployment an unacceptable risk**:
 * **Subtle Serialization Discrepancies**: Jackson omitting empty lists vs Go serializing `null`, datetime timezone truncations, float precision drift.
 * **Implicit Framework Quirks**: Legacy servlet filter quirks, undocumented fallback headers, HTTP 200 responses with embedded error payloads.
 * **State Mutation Regressions**: Silent differences in database transaction boundaries or side-effect firing.
-
-**Enterprise leadership cannot afford to risk breaking production traffic on unverified AI code.**
 
 ---
 
@@ -58,6 +56,7 @@ While AI generates 95% of refactored code seamlessly, **the remaining 5% of hidd
                                       ▼
                        ┌─────────────────────────────┐
                        │ Automated AI Test Generator │
+                       │ - Powered by Google Gemini  │
                        │ - Isolates Request Payload  │
                        │ - Diagnoses Root Cause      │
                        │ - Emits Unit/E2E Test Suite │
@@ -66,13 +65,37 @@ While AI generates 95% of refactored code seamlessly, **the remaining 5% of hidd
 
 1. **Zero Production Latency Penalty**: Client traffic is served synchronously by the primary legacy service. Shadow traffic is mirrored asynchronously through non-blocking worker pools.
 2. **Deep Semantic Diffing**: Compares output JSON responses, latency profiles (P50/P95/P99), and database mutation diffs with tolerance for volatile fields (timestamps, UUIDs).
-3. **Automated AI Regression Test Synthesis**: When a drift is detected (> 0.01%), ShadowDiff isolates the edge-case payload and prompts an LLM to generate turnkey regression test suites (Jest/Vitest, Go, Pytest) and fix suggestions.
+3. **Automated AI Regression Test Synthesis**: When a drift is detected (> 0.01%), ShadowDiff isolates the edge-case payload and prompts **Google Gemini** to generate turnkey regression test suites (Jest/Vitest, Go, Pytest) and fix suggestions.
+
+---
+
+## 🚀 Fly.io Deployment
+
+ShadowDiff is cloud-ready and can be deployed directly to Fly.io as a lightweight proxy sidecar or standalone gateway:
+
+### 1. Prerequisites
+Ensure you have the [Fly CLI installed](https://fly.io/docs/hands-on/install-tools/):
+```bash
+fly auth login
+```
+
+### 2. Configure Secrets
+Set the upstream service targets and Google Gemini API key:
+```bash
+fly secrets set PRIMARY_URL="https://legacy-api.internal"
+fly secrets set SHADOW_URL="https://ai-refactored-api.internal"
+fly secrets set GEMINI_API_KEY="your-gemini-api-key"
+```
+
+### 3. Deploy
+Launch using the included `fly.toml`:
+```bash
+fly launch --now
+```
 
 ---
 
 ## 🏛️ System Architecture
-
-ShadowDiff is organized into modular developer infrastructure layers:
 
 ```mermaid
 flowchart LR
@@ -95,50 +118,11 @@ flowchart LR
 
     subgraph AISynthesis ["4. AI Regression Synthesis"]
         ASTDiff -->|Drift > 0.01%| Triage["Edge Case Isolator & Classifier"]
-        Triage --> LLM["LLM Regression Generator\n(Gemini / Claude / OpenAI / Local)"]
+        Triage --> LLM["Google Gemini Engine\n(gemini-2.0-flash / pro)"]
         LLM --> Tests["Ready-to-Commit Test Cases\n(Vitest, Go, Pytest, k6)"]
         LLM --> Patch["Fix Recommendation Patch"]
     end
-
-    subgraph Observability ["5. Developer Experience"]
-        ASTDiff --> WebUI["Live Stream & Monaco Diff Dashboard"]
-        Tests --> WebUI
-    end
 ```
-
----
-
-## ✨ Key Features
-
-- **⚡ High-Throughput Proxy**: Goroutine-powered asynchronous HTTP request cloning with zero-copy buffers.
-- **🛡️ Write-Safety Modes**: Read-only safe mirroring (`GET`/`HEAD`) with sandboxed database schema routing for mutating requests (`POST`/`PUT`/`DELETE`).
-- **🔍 Intelligent Normalization**: Built-in entropy filters and configurable JSONPath ignore rules to suppress false positives (dynamic timestamps, session tokens).
-- **🤖 Autonomous Test Generation**: Turns every captured production edge-case bug into a regression test file before deployment.
-- **📊 Real-Time Developer Dashboard**: Interactive side-by-side Monaco diff visualizer, drift analytics, and 1-click test export.
-- **🔒 Enterprise-Grade Privacy**: Automatic PII and credential redaction (`Authorization`, `Cookie`, credit card / SSN patterns) before any prompt payload reaches the LLM.
-
----
-
-## 🗺️ Roadmap & Milestones
-
-- [x] **Milestone 1**: Architecture blueprint, repository setup, and design specifications.
-- [ ] **Milestone 2**: Core reverse proxy engine with asynchronous traffic teeing and trace ID correlation.
-- [ ] **Milestone 3**: Semantic JSON comparator and flexible field normalization rules.
-- [ ] **Milestone 4**: Automated LLM prompt orchestration for multi-framework regression test synthesis.
-- [ ] **Milestone 5**: Real-time web observability dashboard with interactive Monaco diff viewer.
-- [ ] **Milestone 6**: Sandboxed database state verification and Kubernetes/Envoy sidecar deployment templates.
-
-For the full architectural plan, see [Master Architectural Plan](docs/ARCHITECTURE.md).
-
----
-
-## 🛠️ Tech Stack
-
-* **Proxy Core**: Go / Node.js
-* **Diff Engine**: Tree AST Semantic Matcher
-* **AI Engine**: Gemini 2.0 Flash / Pro, Claude 3.5 Sonnet, OpenAI, Ollama
-* **Dashboard**: Next.js 15, React 19, Tailwind CSS, Monaco Diff Editor
-* **Storage**: SQLite (WAL) / DuckDB for local, ClickHouse/Redis for distributed
 
 ---
 

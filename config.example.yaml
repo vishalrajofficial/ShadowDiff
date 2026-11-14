@@ -1,0 +1,32 @@
+# ShadowDiff Configuration Example
+proxy_port: ":8080"
+dashboard_port: ":8083"
+
+# Upstream targets
+primary_url: "https://legacy-api.internal"
+shadow_url: "https://ai-refactored-api.internal"
+
+# Security and traffic routing
+safe_mode_only: false       # If true, only GET and HEAD requests are shadowed
+float_tolerance: 0.000001    # Numeric drift threshold
+
+# Non-deterministic fields to suppress
+ignore_paths:
+  - "timestamp"
+  - "created_at"
+  - "updated_at"
+  - "uuid"
+  - "trace_id"
+  - "nonce"
+
+# Headers to ignore in diffing
+ignore_headers:
+  - "date"
+  - "server"
+  - "x-request-id"
+  - "set-cookie"
+  - "content-length"
+
+# AI Regression Generator
+gemini_model: "gemini-2.0-flash"
+auto_generate_test: true
