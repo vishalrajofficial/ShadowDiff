@@ -1,0 +1,39 @@
+# Binaries
+bin/
+dist/
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Dependencies
+node_modules/
+vendor/
+
+# Environment and secrets
+.env
+.env.local
+*.pem
+*.key
+
+# Logs & temporary files
+*.log
+tmp/
+temp/
+coverage/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local databases
+*.sqlite
+*.sqlite3
+*.db
