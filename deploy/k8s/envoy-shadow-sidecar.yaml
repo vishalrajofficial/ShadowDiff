@@ -1,0 +1,128 @@
+# Kubernetes & Istio EnvoyFilter Manifest for Production Shadow Testing
+# Automatically tees production cluster traffic to the ShadowDiff engine
+
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: shadowdiff-traffic-mirror
+  namespace: production
+spec:
+  workloadSelector:
+    labels:
+      app: legacy-monolith
+  configPatches:
+  # 1. Add ShadowDiff Cluster to Envoy static clusters
+  - applyTo: CLUSTER
+    match:
+      context: SIDECAR_OUTBOUND
+    patch:
+      operation: ADD
+      value:
+        name: shadowdiff_engine_cluster
+        type: STRICT_DNS
+        connect_timeout: 0.5s
+        lb_policy: ROUND_ROBIN
+        load_assignment:
+          cluster_name: shadowdiff_engine_cluster
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: shadowdiff.staging.svc.cluster.local
+                    port_value: 8080
+
+  # 2. Add Request Mirror Policy to the HTTP Route
+  - applyTo: HTTP_ROUTE
+    match:
+      context: SIDECAR_INBOUND
+      routeConfiguration:
+        vhost:
+          name: "inbound|8080||"
+          route:
+            name: "default"
+    patch:
+      operation: MERGE
+      value:
+        route:
+          request_mirror_policies:
+          - cluster: shadowdiff_engine_cluster
+            runtime_fraction:
+              default_value:
+                numerator: 100
+                denominator: HUNDRED
+---
+# ShadowDiff Engine Kubernetes Deployment in Staging/Dev
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shadowdiff-engine
+  namespace: staging
+  labels:
+    app: shadowdiff
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: shadowdiff
+  template:
+    metadata:
+      labels:
+        app: shadowdiff
+    spec:
+      containers:
+      - name: shadowdiff
+        image: vishalrajofficial/shadowdiff:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: PORT
+          value: "8080"
+        - name: PRIMARY_URL
+          value: "http://legacy-monolith.production.svc.cluster.local:8080"
+        - name: PRIMARY_TWIN_URL
+          value: "http://legacy-twin.production.svc.cluster.local:8080"
+        - name: SHADOW_URL
+          value: "http://ai-refactored.staging.svc.cluster.local:8080"
+        - name: THREE_WAY_MODE
+          value: "true"
+        - name: DASHBOARD_PORT
+          value: "8083"
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: shadowdiff-secrets
+              key: gemini-api-key
+        ports:
+        - name: ingress
+          containerPort: 8080
+        - name: dashboard
+          containerPort: 8083
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8083
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shadowdiff
+  namespace: staging
+spec:
+  selector:
+    app: shadowdiff
+  ports:
+  - name: ingress
+    port: 8080
+    targetPort: 8080
+  - name: dashboard
+    port: 8083
+    targetPort: 8083

@@ -4,6 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go)](https://golang.org)
+[![Envoy Proxy](https://img.shields.io/badge/Envoy-v1.30+-purple?logo=envoyproxy)](https://www.envoyproxy.io)
 [![Fly.io](https://img.shields.io/badge/Deploy-Fly.io-7856FF?logo=flydotio)](https://fly.io)
 [![Status](https://img.shields.io/badge/Status-Active_Development-brightgreen.svg)]()
 
@@ -18,111 +19,112 @@ Enterprises are actively modernizing mission-critical legacy backends (Java 7/8 
 While AI generates ~95% of refactored code accurately, **the remaining 5% of hidden edge cases make production deployment an unacceptable risk**:
 * **Subtle Serialization Discrepancies**: Jackson omitting empty lists vs Go serializing `null`, datetime timezone truncations, float precision drift.
 * **Implicit Framework Quirks**: Legacy servlet filter quirks, undocumented fallback headers, HTTP 200 responses with embedded error payloads.
-* **State Mutation Regressions**: Silent differences in database transaction boundaries or side-effect firing.
+* **Database State Regressions**: Silent differences in database transaction boundaries, missing audit writes, or N+1 query loop explosions.
 
 ---
 
 ## 💡 The Solution: ShadowDiff
 
-**ShadowDiff** is a high-performance network proxy that duplicates real staging or production HTTP traffic, sending identical payloads to both the legacy service and the AI-refactored service simultaneously.
+**ShadowDiff** is a high-performance network proxy and analysis engine that duplicates real staging or production HTTP traffic, sending identical payloads to both the legacy service and the AI-refactored service simultaneously.
 
 ```
                            [ Live Inbound Traffic ]
                                       │
                                       ▼
                        ┌─────────────────────────────┐
-                       │    ShadowDiff Proxy Core    │
+                       │    Envoy Gateway / Mesh     │
+                       │  (request_mirror_policies)  │
                        └──────────────┬──────────────┘
                                       │
                   ┌───────────────────┴───────────────────┐
                   ▼                                       ▼
         ┌───────────────────┐                   ┌───────────────────┐
-        │  Legacy Service   │                   │  AI-Refactored    │
-        │     (Target)      │                   │  Service (Shadow) │
+        │  Legacy Service   │                   │  ShadowDiff Core  │
+        │     (Target)      │                   │  (Analysis Engine)│
         └─────────┬─────────┘                   └─────────┬─────────┘
                   │                                       │
-                  │ (Live Response to Client)             │ (Intercepted)
+                  │ (Live Response to Client)             ▼
+                  │                             ┌───────────────────┐
+                  │                             │   AI-Refactored   │
+                  │                             │   Candidate (S)   │
+                  │                             └─────────┬─────────┘
                   │                                       │
                   └───────────────────┬───────────────────┘
                                       ▼
                        ┌─────────────────────────────┐
-                       │   Semantic Diff Engine      │
-                       │   - JSON AST Tree Diff      │
-                       │   - Volatile Field Masking  │
-                       │   - Latency Benchmarking    │
+                       │ 3-Way Diff & SQL Comparator │
+                       │ - P1 ⊕ P2 Noise Filter      │
+                       │ - SQL Mutation Interceptor  │
+                       │ - N+1 Query Loop Detector   │
                        └──────────────┬──────────────┘
                                       │
-                               (Drift Detected)
+                         (Pure Regressions Isolated)
                                       ▼
                        ┌─────────────────────────────┐
                        │ Automated AI Test Generator │
                        │ - Powered by Google Gemini  │
-                       │ - Isolates Request Payload  │
-                       │ - Diagnoses Root Cause      │
-                       │ - Emits Unit/E2E Test Suite │
+                       │ - Synthesizes Go/Jest Tests │
+                       │ - Root Cause Code Fixes     │
                        └─────────────────────────────┘
 ```
 
-1. **Zero Production Latency Penalty**: Client traffic is served synchronously by the primary legacy service. Shadow traffic is mirrored asynchronously through non-blocking worker pools.
-2. **Deep Semantic Diffing**: Compares output JSON responses, latency profiles (P50/P95/P99), and database mutation diffs with tolerance for volatile fields (timestamps, UUIDs).
-3. **Automated AI Regression Test Synthesis**: When a drift is detected (> 0.01%), ShadowDiff isolates the edge-case payload and prompts **Google Gemini** to generate turnkey regression test suites (Jest/Vitest, Go, Pytest) and fix suggestions.
+---
+
+## 🚀 Key Architectural Capabilities
+
+### 1. ⚡ Network-Level Envoy Traffic Mirroring
+ShadowDiff integrates directly with **Envoy Proxy** and **Istio Service Mesh** using `request_mirror_policies`. Traffic is cloned asynchronously at line rate in the network layer with **zero application latency penalty**.
+
+### 2. 🎯 3-Way Differential Noise Cancellation (Diffy Model)
+Automatically filters out non-deterministic runtime noise (timestamps, UUIDs, session nonces) by evaluating twin baseline instances:
+$$\mathcal{N} = P_1 \oplus P_2$$
+$$\mathcal{D} = (P_1 \oplus S) \setminus \mathcal{N}$$
+Only verified contract regressions reach developer triage.
+
+### 3. 💾 Database Mutation & SQL Side-Effect Diffing
+Captures and correlates SQL statements executed by both services for each HTTP trace:
+* **Missing Writes**: Flags when legacy wrote to `audit_logs` or ledger tables that modern code omitted.
+* **Transaction Leaks**: Warns if legacy used `BEGIN...COMMIT` and modern ran autocommit statements.
+* **N+1 Query Explosions**: Detects when modern ORMs loop and execute $\ge 3\times$ more queries than legacy.
+
+### 4. 🤖 Google Gemini Regression Test Synthesis
+Every isolated edge case is analyzed by **Google Gemini** (`gemini-2.0-flash`), which writes a turnkey integration test (Go `httptest` or Vitest) and diagnoses the code fix.
 
 ---
 
-## 🚀 Fly.io Deployment
+## 🛠️ Quickstart with Envoy & Docker Compose
 
-ShadowDiff is cloud-ready and can be deployed directly to Fly.io as a lightweight proxy sidecar or standalone gateway:
+Launch the complete 5-container service mesh testbed (Envoy Gateway + ShadowDiff + Legacy Target + Twin Replica + AI Candidate):
 
-### 1. Prerequisites
-Ensure you have the [Fly CLI installed](https://fly.io/docs/hands-on/install-tools/):
 ```bash
-fly auth login
+# 1. Clone the repository
+git clone https://github.com/vishalrajofficial/ShadowDiff.git
+cd ShadowDiff
+
+# 2. Launch the Envoy Service Mesh topology
+docker compose -f docker-compose.envoy.yml up -d
 ```
 
-### 2. Configure Secrets
-Set the upstream service targets and Google Gemini API key:
+### Send Ingress Traffic Through Envoy (Port 10000):
 ```bash
-fly secrets set PRIMARY_URL="https://legacy-api.internal"
-fly secrets set SHADOW_URL="https://ai-refactored-api.internal"
-fly secrets set GEMINI_API_KEY="your-gemini-api-key"
+# Send test traffic to the Envoy Gateway (mirrored to ShadowDiff automatically):
+curl http://localhost:10000/api/users/1
+curl -X POST http://localhost:10000/api/orders
 ```
 
-### 3. Deploy
-Launch using the included `fly.toml`:
-```bash
-fly launch --now
-```
+Open the telemetry dashboard at **`http://localhost:8083`** to inspect the live 3-way diffs, SQL mutation timeline, and Gemini-generated tests!
 
 ---
 
-## 🏛️ System Architecture
+## ☸️ Kubernetes & Istio Service Mesh Deployment
 
-```mermaid
-flowchart LR
-    subgraph Ingress ["1. Ingress & Traffic Teeing"]
-        Client["Incoming Traffic"] --> Proxy["ShadowDiff Reverse Proxy"]
-        Proxy -->|Sync Pipe| Legacy["Legacy Backend"]
-        Proxy -.->|Async Tee| Shadow["AI-Refactored Backend"]
-    end
+For production Kubernetes clusters running Istio or native Envoy, deploy the included `EnvoyFilter` to mirror traffic dynamically:
 
-    subgraph Correlator ["2. Response Interception & Normalization"]
-        Legacy --> PrimaryResp["Primary Response\n(Status, Headers, Body, Latency)"]
-        Shadow --> ShadowResp["Shadow Response\n(Status, Headers, Body, Latency)"]
-        PrimaryResp & ShadowResp --> Normalizer["Volatile Field Normalizer\n(UUIDs, Timestamps, Tokens)"]
-    end
-
-    subgraph DiffEngine ["3. Multi-Vector Diffing Engine"]
-        Normalizer --> ASTDiff["Semantic JSON AST Diff"]
-        Normalizer --> PerfDiff["Latency Regression Profiler"]
-    end
-
-    subgraph AISynthesis ["4. AI Regression Synthesis"]
-        ASTDiff -->|Drift > 0.01%| Triage["Edge Case Isolator & Classifier"]
-        Triage --> LLM["Google Gemini Engine\n(gemini-2.0-flash / pro)"]
-        LLM --> Tests["Ready-to-Commit Test Cases\n(Vitest, Go, Pytest, k6)"]
-        LLM --> Patch["Fix Recommendation Patch"]
-    end
+```bash
+kubectl apply -f deploy/k8s/envoy-shadow-sidecar.yaml
 ```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full architectural specifications.
 
 ---
 

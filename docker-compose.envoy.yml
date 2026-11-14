@@ -1,0 +1,76 @@
+# Production Service Mesh Topology: Envoy Gateway + ShadowDiff + 3-Way Differential Cluster
+services:
+  # 1. Envoy Edge / Ingress Proxy (Handles Wire-Speed Request Shadowing)
+  envoy:
+    image: envoyproxy/envoy:v1.30-latest
+    container_name: shadowdiff-envoy
+    volumes:
+      - ./deploy/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
+    command: ["-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
+    ports:
+      - "10000:10000"  # Production ingress port (send all client traffic here)
+      - "9901:9901"    # Envoy Admin console
+    depends_on:
+      - legacy-service
+      - shadowdiff
+    restart: unless-stopped
+
+  # 2. ShadowDiff Core: 3-Way Diffing, SQL Interception & Google Gemini Engine
+  shadowdiff:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shadowdiff-engine
+    environment:
+      - PORT=8080
+      - PRIMARY_URL=http://legacy-service:8081
+      - PRIMARY_TWIN_URL=http://legacy-twin:8084
+      - SHADOW_URL=http://refactored-service:8082
+      - DASHBOARD_PORT=8083
+      - THREE_WAY_MODE=true
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=gemini-2.0-flash
+    ports:
+      - "8080:8080"    # Ingress mirror target from Envoy
+      - "8083:8083"    # Web Dashboard & SQL Ingest API
+    depends_on:
+      - legacy-service
+      - legacy-twin
+      - refactored-service
+    restart: unless-stopped
+
+  # 3. Primary Baseline Service (Target)
+  legacy-service:
+    image: golang:1.22-alpine
+    container_name: shadowdiff-legacy-primary
+    working_dir: /app
+    volumes:
+      - ./examples/legacy-service:/app
+    command: ["go", "run", "main.go", "-port=:8081"]
+    ports:
+      - "8081:8081"
+    restart: unless-stopped
+
+  # 4. Primary Twin Replica (For 3-Way Noise Cancellation)
+  legacy-twin:
+    image: golang:1.22-alpine
+    container_name: shadowdiff-legacy-twin
+    working_dir: /app
+    volumes:
+      - ./examples/legacy-service:/app
+    command: ["go", "run", "main.go", "-port=:8084"]
+    ports:
+      - "8084:8084"
+    restart: unless-stopped
+
+  # 5. AI-Refactored Service (Shadow Candidate Under Test)
+  refactored-service:
+    image: golang:1.22-alpine
+    container_name: shadowdiff-ai-candidate
+    working_dir: /app
+    volumes:
+      - ./examples/refactored-service:/app
+    command: ["go", "run", "main.go"]
+    ports:
+      - "8082:8082"
+    restart: unless-stopped

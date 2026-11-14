@@ -1,0 +1,101 @@
+# Envoy Configuration for Production Shadow Traffic Mirroring
+# High-concurrency zero-overhead packet teeing directly at the network/ingress layer
+
+admin:
+  address:
+    socket_address:
+      address: 0.0.0.0
+      port_value: 9901
+
+static_resources:
+  listeners:
+  - name: ingress_listener
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 10000
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+          codec_type: AUTO
+          route_config:
+            name: shadow_route
+            virtual_hosts:
+            - name: backend_services
+              domains: ["*"]
+              routes:
+              - match:
+                  prefix: "/"
+                route:
+                  # Primary Synchronous Path: Live clients route to legacy baseline
+                  cluster: legacy_primary
+                  timeout: 15s
+
+                  # Asynchronous Network-Level Shadowing
+                  # Clones 100% (or configurable sample %) of traffic at wire speed
+                  request_mirror_policies:
+                  - cluster: shadowdiff_engine
+                    runtime_fraction:
+                      default_value:
+                        numerator: 100
+                        denominator: HUNDRED
+
+                # Metadata & Tracing Headers
+                request_headers_to_add:
+                - header:
+                    key: "x-shadowdiff-envoy-mirrored"
+                    value: "true"
+                - header:
+                    key: "x-forwarded-proto"
+                    value: "http"
+
+          http_filters:
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+  clusters:
+  # 1. Primary Target: Legacy Baseline Monolith
+  - name: legacy_primary
+    connect_timeout: 0.25s
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    circuit_breakers:
+      thresholds:
+      - priority: DEFAULT
+        max_connections: 2000
+        max_pending_requests: 2000
+        max_requests: 4000
+    load_assignment:
+      cluster_name: legacy_primary
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: legacy-service
+                port_value: 8081
+
+  # 2. ShadowDiff Engine: Asynchronous Mirror Ingestion & Gemini Synthesizer
+  - name: shadowdiff_engine
+    connect_timeout: 0.25s
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    circuit_breakers:
+      thresholds:
+      - priority: DEFAULT
+        max_connections: 5000
+        max_pending_requests: 5000
+        max_requests: 10000
+    load_assignment:
+      cluster_name: shadowdiff_engine
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: shadowdiff
+                port_value: 8080
