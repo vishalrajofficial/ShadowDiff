@@ -34,7 +34,7 @@ To eliminate false positives caused by non-deterministic fields (timestamps, eph
             │     N = P1 ⊕ P2      ││     R = P1 ⊕ S       │
             └───────────┬──────────┘└───────────┬──────────┘
                         │                       │
-                        └───────────┬───────────┘
+                        └───────────┬──────────┘
                                     ▼
                       ┌───────────────────────────┐
                       │    Noise Cancellation     │
@@ -66,26 +66,56 @@ To eliminate false positives caused by non-deterministic fields (timestamps, eph
 
 ---
 
-## 3. Component Pipeline
+## 3. SQL Mutation & Database Side-Effect Diffing Engine
 
-### 3.1 Ingress Reverse Proxy
-- Synchronous path: streams payload to Primary ($P_1$) and pipes response to client with zero added latency.
-- Asynchronous path: clones request buffer and delivers concurrently to Primary Twin ($P_2$) and Shadow Candidate ($S$).
-- Trace propagation: attaches `X-ShadowDiff-Trace-ID` for end-to-end telemetry correlation.
+In enterprise monolith modernizations, an AI-refactored service may return an identical `200 OK` JSON response while introducing catastrophic silent database corruption. 
 
-### 3.2 3-Way Differential Engine & Volatility Tracker
-- AST-level JSON comparison for deep structure and key presence.
-- Path volatility index ($0.0 \le V_p \le 1.0$) learning the dynamic entropy rate of endpoints over time.
-- Status code, critical header, and latency percentile diffing (P50, P95, P99).
+ShadowDiff implements a dedicated **SQL Mutation Interceptor & Comparator**:
 
-### 3.3 Autonomous Regression Test Synthesizer
-- Triggered strictly when pure regressions ($\mathcal{D} > 0$) are isolated.
-- Prompts Google Gemini (`gemini-2.0-flash`) to emit:
-  - Unit/integration test scripts (Go `httptest`, Vitest/Jest).
-  - Diagnostic breakdown explaining the runtime variance.
-  - Recommended patch for the refactored codebase.
+```
+ ┌─────────────────────────────────┐       ┌─────────────────────────────────┐
+ │ Legacy Monolith (e.g. Java/PHP) │       │ AI-Refactored Service (Go/Node) │
+ └────────────────┬────────────────┘       └────────────────┬────────────────┘
+                  │ [SQL Executions]                        │ [SQL Executions]
+                  ▼                                         ▼
+      ┌───────────────────────┐                 ┌───────────────────────┐
+      │  Legacy SQL Trace     │                 │   Shadow SQL Trace    │
+      │  - BEGIN TRANSACTION  │                 │  - UPDATE inventory   │
+      │  - UPDATE inventory   │                 │  - SELECT disc (x4)   │
+      │  - INSERT audit_logs  │                 │    (Missing BEGIN!)   │
+      │  - COMMIT             │                 │    (Missing Audit!)   │
+      └───────────┬───────────┘                 └───────────┬───────────┘
+                  │                                         │
+                  └───────────────────┬─────────────────────┘
+                                      ▼
+                      ┌───────────────────────────────┐
+                      │  SQL Mutation Diff Engine     │
+                      │  - Missing Table Writes       │
+                      │  - N+1 Query Explosion        │
+                      │  - Transaction Boundary Check │
+                      │  - Parameter Value Drift      │
+                      └───────────────┬───────────────┘
+                                      │
+                           (Database Discrepancy)
+                                      ▼
+                      ┌───────────────────────────────┐
+                      │  Google Gemini ORM Diagnosis  │
+                      │  - Generates DB rollback test │
+                      │  - Suggests @Transactional    │
+                      │  - Emits eager loading patch  │
+                      └───────────────────────────────┘
+```
 
-### 3.4 Developer UI & Telemetry
+### Key Detection Capabilities
+* **Missing Database Mutations (`MISSING_DB_MUTATION`)**: Flags when legacy writes to tables (e.g. `audit_logs`, `ledger_entries`) that the modern code forgot to mutate.
+* **Transaction Boundary Leaks (`MISSING_TRANSACTION_BOUNDARY`)**: Detects when legacy code operated inside atomic `BEGIN...COMMIT` blocks, but refactored ORM code ran autocommit statements vulnerable to partial failures.
+* **N+1 Query Explosion (`N_PLUS_ONE_QUERY_EXPLOSION`)**: Detects when refactored ORMs query relational tables in loops ($K \ge 3$ queries) instead of single joined batch queries.
+* **Parameter Value Drift (`DB_PARAM_VALUE_DRIFT`)**: Compares bound SQL parameter values across matching statements.
+
+---
+
+## 4. Developer UI & Telemetry
 - Real-time side-by-side comparison across $P_1$, $P_2$, and $S$.
-- Live metric counters for Noise Filtered vs Pure Regressions.
+- Visual SQL execution timeline with color-coded operation tags (`[INSERT]`, `[UPDATE]`, `[BEGIN]`).
+- Automatic alerts for N+1 query patterns and missing mutations.
 - One-click regression test copy and export.
