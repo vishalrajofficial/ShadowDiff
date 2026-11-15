@@ -227,7 +227,7 @@ Shadowing mutating HTTP requests (`POST`, `PUT`, `DELETE`, `PATCH`) to candidate
 ## 8. Cloud Production Deployment & Live Sandbox (Fly.io)
 
 ShadowDiff is packaged as a minimal multi-stage Alpine container (image size ~8.6 MB) deployed on **Fly.io**:
-- **Live Sandbox URL**: `https://shadowdiff-demo.fly.dev`
+- **Live Sandbox URL**: `https://shadowdiff.fly.dev`
 - **Embedded Mock Topology**: Runs in-process baseline ($P_1$), twin ($P_2$), and shadow ($S$) mock instances when `DEMO_MODE=true`.
 - **Self-Driving Traffic Simulator**: Generates realistic traffic across 5 edge-case scenarios every 3 seconds to keep live metrics, noise cancellation filters, and SQL mutation timelines active for external evaluation.
 - **Zero-Downtime High Availability**: Multi-machine autoscaling with automatic stop/start machine configuration (`min_machines_running = 1`).

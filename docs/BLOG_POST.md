@@ -1,6 +1,6 @@
 # Why Enterprise CTOs Won't Deploy AI-Migrated Code (And How We Built 3-Way Shadow Testing in Go)
 
-*By Vishal Raj • Live Cloud Demo: [shadowdiff-demo.fly.dev](https://shadowdiff-demo.fly.dev/) • Open Source: [github.com/vishalrajofficial/ShadowDiff](https://github.com/vishalrajofficial/ShadowDiff)*
+*By Vishal Raj • Live Cloud Demo: [shadowdiff.fly.dev](https://shadowdiff.fly.dev/) • Open Source: [github.com/vishalrajofficial/ShadowDiff](https://github.com/vishalrajofficial/ShadowDiff)*
 
 ---
 
@@ -176,7 +176,7 @@ Teams can block deployments in GitHub Actions or GitLab CI before promoting AI-r
 
 ```bash
 shadowdiff gate \
-  -dashboard-url=https://shadowdiff-demo.fly.dev \
+  -dashboard-url=https://shadowdiff.fly.dev \
   -duration=15s \
   -min-parity=100.0 \
   -min-requests=20 \
@@ -193,7 +193,7 @@ If parity drops below 100%, or an N+1 query loop or missing SQL write is detecte
 
 You can interact with ShadowDiff right now in your browser without installing anything:
 
-* 🌐 **Live Cloud Sandbox**: [https://shadowdiff-demo.fly.dev](https://shadowdiff-demo.fly.dev/)  
+* 🌐 **Live Cloud Sandbox**: [https://shadowdiff.fly.dev](https://shadowdiff.fly.dev/)  
   *(A self-driving traffic simulator runs in the background, firing 3-way mirrored traffic, demonstrating Diffy noise cancellation, and detecting simulated bugs in real time).*
 * 📦 **GitHub Repository**: [https://github.com/vishalrajofficial/ShadowDiff](https://github.com/vishalrajofficial/ShadowDiff)
 
