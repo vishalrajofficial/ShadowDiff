@@ -28,5 +28,11 @@ ignore_headers:
   - "content-length"
 
 # AI Regression Generator
+ai_provider: "auto"              # "auto", "gemini", "ollama", "offline"
 gemini_model: "gemini-2.0-flash"
+ollama_url: "http://localhost:11434"
+ollama_model: "llama3.3"         # llama3.3, deepseek-r1:8b, qwen2.5-coder
 auto_generate_test: true
+
+# Enterprise Security & Compliance
+enable_pii_redaction: true       # Masks Credit Cards, SSNs, Emails, Phones, JWTs, API Keys

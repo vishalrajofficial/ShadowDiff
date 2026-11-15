@@ -128,6 +128,21 @@ Allows safe shadow mirroring of mutating HTTP methods (`POST`, `PUT`, `DELETE`, 
 * **Ephemeral Schema Sandboxing**: Dynamically creates disposable schemas per test run and drops them upon completion.
 * **Serverless CoW Branching**: Leverages Neon / Supabase serverless branching to clone database state instantly via API for mutating candidate runs.
 
+### 8. 🔒 Enterprise PII & Sensitive Data Redactor
+Automated zero-latency privacy sanitization across all request payloads, responses, SQL queries, and diff snapshots:
+* **Credit Cards (PAN)**: Full regex & Luhn-validated masking (`[REDACTED_CREDIT_CARD]`).
+* **Social Security & National IDs**: Automated pattern redaction (`[REDACTED_SSN]`).
+* **Emails & Phone Numbers**: Standard RFC & E.164 patterns (`[REDACTED_EMAIL]`, `[REDACTED_PHONE]`).
+* **API Keys & JWTs**: Detects and redacts Bearer tokens, JWT headers/signatures, and private keys.
+* **Sensitive JSON Keys**: Automatically scrubs passwords, CVVs, pins, secrets, and auth tokens while preserving valid JSON syntax.
+* **Zero Leakage to AI**: Guarantees raw customer data NEVER reaches external LLM APIs, generated test files, or public dashboards.
+
+### 9. 🦙 Local & Air-Gapped LLM Synthesizer (Ollama / vLLM)
+For regulated enterprise environments (finance, healthcare, defense) where cloud APIs cannot be reached:
+* **Native Ollama Integration**: Seamless support for local models (`llama3.3`, `deepseek-r1:8b`, `qwen2.5-coder`) via `-ai-provider=ollama`.
+* **OpenAI-Compatible Fallback**: Native compatibility with **vLLM**, **LocalAI**, and **LM Studio**.
+* **Zero External Telemetry**: 100% on-premises execution with zero cloud network traffic.
+
 ---
 
 ## 🚦 GitHub Actions CI/CD Quality Gating Workflow
