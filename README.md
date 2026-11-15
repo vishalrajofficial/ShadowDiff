@@ -6,9 +6,16 @@
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go)](https://golang.org)
 [![Envoy Proxy](https://img.shields.io/badge/Envoy-v1.30+-purple?logo=envoyproxy)](https://www.envoyproxy.io)
 [![Fly.io](https://img.shields.io/badge/Deploy-Fly.io-7856FF?logo=flydotio)](https://fly.io)
-[![Status](https://img.shields.io/badge/Status-Active_Development-brightgreen.svg)]()
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-shadowdiff--demo.fly.dev-10B981?style=flat&logo=flydotio)](https://shadowdiff-demo.fly.dev/)
 
-> **Eliminating the 5% risk that stops enterprise CTOs from deploying AI-modernized backends to production.**
+> **Eliminating the 5% risk that stops enterprise CTOs from deploying AI-modernized backends to production.**  
+> 🌐 **Interactive Live Cloud Sandbox**: [https://shadowdiff-demo.fly.dev](https://shadowdiff-demo.fly.dev/) (Self-driving dual-traffic simulator active)
+
+---
+
+## 🎬 Live Terminal Walkthrough (`vhs`)
+
+![ShadowDiff Terminal Walkthrough](assets/shadowdiff-demo.gif)
 
 ---
 

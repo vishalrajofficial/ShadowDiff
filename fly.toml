@@ -1,7 +1,7 @@
 # fly.toml app configuration file generated for ShadowDiff
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 
-app = "shadowdiff"
+app = "shadowdiff-demo"
 primary_region = "iad"
 
 [build]
@@ -9,6 +9,8 @@ primary_region = "iad"
 
 [env]
   PORT = "8080"
+  DEMO_MODE = "true"
+  AUTO_TRAFFIC = "true"
   SAFE_MODE_ONLY = "false"
   FLOAT_TOLERANCE = "0.000001"
   GEMINI_MODEL = "gemini-2.0-flash"

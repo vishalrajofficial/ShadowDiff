@@ -28,6 +28,8 @@ COPY --from=builder /shadowdiff /app/shadowdiff
 
 # Default environment variables
 ENV PORT=8080 \
+    DEMO_MODE=true \
+    AUTO_TRAFFIC=true \
     SAFE_MODE_ONLY=false \
     FLOAT_TOLERANCE=0.000001 \
     GEMINI_MODEL=gemini-2.0-flash
