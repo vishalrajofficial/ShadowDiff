@@ -90,6 +90,13 @@ Captures and correlates SQL statements executed by both services for each HTTP t
 ### 4. 🤖 Google Gemini Regression Test Synthesis
 Every isolated edge case is analyzed by **Google Gemini** (`gemini-2.0-flash`), which writes a turnkey integration test (Go `httptest` or Vitest) and diagnoses the code fix.
 
+### 5. 🐙 Autonomous Closed-Loop GitHub PR Bot
+Eliminates manual triaging by directly integrating with the GitHub API:
+* **Automatic Branching**: Spins up `shadowdiff/fix-<trace_id>` from the repository's default branch.
+* **Test File Commitment**: Automatically commits the synthesized regression test directly to the repository (e.g. `tests/regression/test_drift_<trace_id>.go`).
+* **Rich Pull Request Generation**: Opens a detailed PR with side-by-side JSON diff tables, SQL mutation waterfall analysis, N+1 query warnings, and local verification commands.
+* **1-Click Triage in Console**: Developers can inspect the incident in the web console and click **"🚀 Open GitHub PR"** to immediately open the PR on GitHub.
+
 ---
 
 ## 🛠️ Quickstart with Envoy & Docker Compose

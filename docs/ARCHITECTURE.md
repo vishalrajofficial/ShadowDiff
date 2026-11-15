@@ -114,7 +114,35 @@ ShadowDiff implements a dedicated **SQL Mutation Interceptor & Comparator**:
 
 ---
 
-## 4. Developer UI & Telemetry
+## 4. Autonomous Closed-Loop GitHub PR Bot Pipeline
+
+ShadowDiff transforms detected regressions directly into actionable Git artifacts:
+
+```mermaid
+flowchart LR
+    Diff["Drift Verified\n(AST & SQL Diff)"] --> Gemini["Google Gemini\nSynthesizer"]
+    Gemini --> TestFile["test_drift_xxx.go\n+ Code Fix Patch"]
+    TestFile --> Bot["ShadowDiff GitHub Bot"]
+    Bot -->|1. Create Branch| Branch["refs/heads/shadowdiff/fix-xxx"]
+    Bot -->|2. Commit Test File| Commit["tests/regression/..."]
+    Bot -->|3. Open Pull Request| PR["GitHub Pull Request\n(With Diffs & Evidence)"]
+    PR --> Reviewer["Human Reviewer / CI/CD"]
+```
+
+### Automation Lifecycle
+1. **Branch Creation**: Queries GitHub REST API for default branch head SHA and creates `shadowdiff/fix-<trace_id>`.
+2. **Atomic Test Commit**: Encodes the generated test file into Base64 and commits to `tests/regression/test_drift_<trace_id>.go`.
+3. **Structured PR Assembly**: Assembles a formatted Markdown Pull Request containing:
+   - Request metadata (HTTP route, trace ID, timestamp).
+   - Side-by-side JSON contract diff table.
+   - Database mutation and N+1 query warning matrix.
+   - Google Gemini root-cause diagnosis and suggested ORM patch.
+   - Local reproduction CLI command (`go test -v ./tests/regression/...`).
+4. **Trigger Modes**: Available via full automation (`-auto-pr=true`) or on-demand with a single click in the Web Console.
+
+---
+
+## 5. Developer UI & Telemetry
 - Real-time side-by-side comparison across $P_1$, $P_2$, and $S$.
 - Visual SQL execution timeline with color-coded operation tags (`[INSERT]`, `[UPDATE]`, `[BEGIN]`).
 - Automatic alerts for N+1 query patterns and missing mutations.
