@@ -17,7 +17,7 @@ jobs:
         image: postgres:15-alpine
         env:
           POSTGRES_USER: shadowdiff
-          POSTGRES_PASSWORD: secretpassword
+          POSTGRES_PASSWORD: postgres
           POSTGRES_DB: shadowdiff_test
         ports:
           - 5432:5432
