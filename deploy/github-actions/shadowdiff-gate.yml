@@ -1,0 +1,87 @@
+name: ShadowDiff CI/CD Quality Gate
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  push:
+    branches: [ main, master ]
+
+jobs:
+  shadow-gate:
+    name: Dual-Traffic Shadow Gating Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: shadowdiff
+          POSTGRES_PASSWORD: secretpassword
+          POSTGRES_DB: shadowdiff_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Install Dependencies & Build Binaries
+        run: |
+          go build -o bin/shadowdiff ./cmd/shadowdiff/main.go
+          go build -o bin/legacy-service ./examples/legacy-service/main.go
+          go build -o bin/refactored-service ./examples/refactored-service/main.go
+
+      - name: Start Baseline Services (Legacy & Refactored Candidate)
+        run: |
+          ./bin/legacy-service -port=:8081 &
+          ./bin/refactored-service -port=:8082 &
+          sleep 2
+
+      - name: Start ShadowDiff Dual-Traffic Engine
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./bin/shadowdiff \
+            -proxy-port=:8080 \
+            -primary-url=http://localhost:8081 \
+            -shadow-url=http://localhost:8082 \
+            -dashboard-port=:8083 \
+            -sandbox-mode=rollback &
+          sleep 2
+
+      - name: Replay Traffic / Execute Integration Test Suite
+        run: |
+          echo "Simulating live production traffic against ShadowDiff gateway (:8080)..."
+          for i in {1..20}; do
+            curl -s -X GET "http://localhost:8080/api/users?id=$i" > /dev/null || true
+            curl -s -X POST "http://localhost:8080/api/orders" \
+              -H "Content-Type: application/json" \
+              -d '{"user_id": '$i', "amount": 99.95, "currency": "USD"}' > /dev/null || true
+            sleep 0.1
+          done
+
+      - name: Execute ShadowDiff CI/CD Quality Gate
+        run: |
+          echo "Evaluating semantic parity, database mutations, and N+1 query loops..."
+          ./bin/shadowdiff gate \
+            -dashboard-url=http://localhost:8083 \
+            -duration=5s \
+            -min-parity=100.0 \
+            -min-requests=10 \
+            -max-drifts=0 \
+            -allow-n-plus-one=false \
+            -allow-db-drift=false \
+            -format=text

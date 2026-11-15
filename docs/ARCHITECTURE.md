@@ -142,8 +142,82 @@ flowchart LR
 
 ---
 
-## 5. Developer UI & Telemetry
+## 5. CI/CD "Shadow Gating" Architecture (`shadowdiff gate`)
+
+The **Shadow Gating Evaluator** serves as a hard quality gate in pre-release soak testing, staging deployments, or pull request pipelines:
+
+```mermaid
+flowchart TD
+    Ingress["Simulated / Mirrored Traffic"] --> Proxy["ShadowDiff Gateway (:8080)"]
+    Proxy --> Baseline["Legacy Target (:8081)"]
+    Proxy --> Shadow["AI Candidate (:8082)"]
+    Proxy --> Storage["Metrics & Telemetry Store"]
+
+    subgraph CICD ["CI/CD Pipeline Runner"]
+        GateCLI["shadowdiff gate\n(--min-parity=100.0 --min-requests=50)"]
+    end
+
+    GateCLI -->|Poll /api/stats & /api/reports| Storage
+    GateCLI --> Evaluator{"Violation Evaluator\n- Low Parity?\n- DB Mutation Drift?\n- N+1 Query Loops?"}
+    Evaluator -->|Violations Found| Fail["Exit 1 (Block Merge / Abort Release)"]
+    Evaluator -->|Clean Parity| Pass["Exit 0 (Promotion Approved)"]
+```
+
+### Evaluation Criteria
+* **Traffic Adequacy**: Requires a minimum request quorum (`-min-requests`) before declaring a gate passed.
+* **Deterministic Contract Parity**: Reconciles pure regressions against noise cancellation, ensuring only true contract divergence causes build failures.
+* **Side-Effect & Mutation Zero-Tolerance**: Rejects any build that introduces uncommitted transactions, dropped audit writes, or N+1 query loops.
+* **Dual Output Modes**: Supports rich ANSI styled terminal summaries and machine-readable JSON for integration with Datadog, GitHub Checks API, or Slack webhooks.
+
+---
+
+## 6. Ephemeral Copy-on-Write (CoW) Database Sandboxing
+
+Shadowing mutating HTTP requests (`POST`, `PUT`, `DELETE`, `PATCH`) to candidate services presents severe risk of database pollution and double-charging. ShadowDiff provides three sandboxing strategies:
+
+```
+                           [ Inbound Mutating Write (POST/PUT/DELETE) ]
+                                                │
+                                                ▼
+                                ┌───────────────────────────────┐
+                                │      ShadowDiff Gateway       │
+                                └───────────────┬───────────────┘
+                                                │
+                       ┌────────────────────────┴────────────────────────┐
+                       ▼                                                 ▼
+             ┌───────────────────┐                             ┌───────────────────┐
+             │  Primary Target   │                             │  Candidate Target │
+             │   (Writes to DB)  │                             │  (Shadow Request) │
+             └─────────┬─────────┘                             └─────────┬─────────┘
+                       │                                                 │
+                       │                                [Injected: X-ShadowDiff-Sandbox-ID]
+                       ▼                                                 ▼
+             ┌───────────────────┐                             ┌───────────────────┐
+             │  Primary Database │                             │ Ephemeral Sandbox │
+             │  (Committed State)│                             │ - Savepoint ROLLBACK
+             └───────────────────┘                             │ - Ephemeral Schema
+                                                               │ - Serverless CoW Branch
+                                                               └───────────────────┘
+```
+
+### Supported Sandboxing Modes
+1. **Mode Rollback (`rollback`)**:
+   - Assigns an ephemeral transaction boundary header (`X-ShadowDiff-Sandbox-ID: sbx_<trace_id>`).
+   - Shadow database interceptor opens a dedicated transactional savepoint and executes an automatic `ROLLBACK` when the shadow cycle concludes.
+   - Zero persistent database pollution without extra infrastructure overhead.
+2. **Mode Ephemeral Schema (`schema`)**:
+   - Provisions an isolated schema (e.g. `shadow_sbx_<trace_id>`) with cloned table definitions for each test run.
+   - Safely executes writes and automatically drops the schema upon test completion.
+3. **Mode Serverless CoW Branching (`neon`)**:
+   - Coordinates with Neon / Supabase serverless PostgreSQL APIs to provision instant, zero-storage copy-on-write database branches.
+   - The shadow candidate runs directly against the ephemeral CoW branch; branch is instantly deprovisioned after evaluation.
+
+---
+
+## 7. Developer UI & Telemetry
 - Real-time side-by-side comparison across $P_1$, $P_2$, and $S$.
 - Visual SQL execution timeline with color-coded operation tags (`[INSERT]`, `[UPDATE]`, `[BEGIN]`).
+- Ephemeral DB Sandbox (CoW) isolation telemetry card and per-trace session badges.
+- One-click CI/CD Quality Gate CLI command generator modal.
 - Automatic alerts for N+1 query patterns and missing mutations.
-- One-click regression test copy and export.
+- One-click regression test copy and GitHub Pull Request opening.

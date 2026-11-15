@@ -97,6 +97,74 @@ Eliminates manual triaging by directly integrating with the GitHub API:
 * **Rich Pull Request Generation**: Opens a detailed PR with side-by-side JSON diff tables, SQL mutation waterfall analysis, N+1 query warnings, and local verification commands.
 * **1-Click Triage in Console**: Developers can inspect the incident in the web console and click **"🚀 Open GitHub PR"** to immediately open the PR on GitHub.
 
+### 6. 🚦 CI/CD "Shadow Gating" CLI (`shadowdiff gate`)
+A native deployment blocker that evaluates traffic quality during pre-release soak tests or integration pipelines:
+* **Automated Evaluation**: Assesses semantic parity, database mutations, and N+1 query loops over a specified evaluation window.
+* **Zero False Failure**: Honors Diffy noise cancellation ($\mathcal{N} = P_1 \oplus P_2$), only failing on genuine regressions.
+* **Pipeline Integration**: Returns standard exit codes (`0` for PASS, `1` for FAIL/violation, `2` for error) with high-impact ANSI colored terminal summaries and optional JSON format.
+
+```bash
+# Evaluate quality gate in your CI/CD pipeline:
+shadowdiff gate \
+  -dashboard-url=http://localhost:8083 \
+  -duration=15s \
+  -min-parity=100.0 \
+  -min-requests=50 \
+  -max-drifts=0 \
+  -allow-n-plus-one=false \
+  -allow-db-drift=false
+```
+
+### 7. 🛡️ Ephemeral Copy-on-Write (CoW) Database Sandboxing
+Allows safe shadow mirroring of mutating HTTP methods (`POST`, `PUT`, `DELETE`, `PATCH`) with **zero database pollution**:
+* **Transactional Savepoint Rollbacks**: Injects boundary headers to ensure shadow writes execute within an isolated savepoint and automatically roll back.
+* **Ephemeral Schema Sandboxing**: Dynamically creates disposable schemas per test run and drops them upon completion.
+* **Serverless CoW Branching**: Leverages Neon / Supabase serverless branching to clone database state instantly via API for mutating candidate runs.
+
+---
+
+## 🚦 GitHub Actions CI/CD Quality Gating Workflow
+
+Incorporate ShadowDiff directly into your automated deployment pipeline (`.github/workflows/shadowdiff.yml`):
+
+```yaml
+name: Dual-Traffic Shadow Gating
+on: [pull_request, push]
+
+jobs:
+  shadow-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build & Start Services
+        run: |
+          go build -o bin/shadowdiff ./cmd/shadowdiff/main.go
+          ./bin/legacy-service -port=:8081 &
+          ./bin/refactored-service -port=:8082 &
+          ./bin/shadowdiff -proxy-port=:8080 -primary-url=http://localhost:8081 -shadow-url=http://localhost:8082 -sandbox-mode=rollback &
+          sleep 2
+
+      - name: Replay Traffic
+        run: |
+          for i in {1..25}; do
+            curl -s "http://localhost:8080/api/users?id=$i" > /dev/null
+            curl -s -X POST "http://localhost:8080/api/orders" -d '{"amount":99.50}' > /dev/null
+          done
+
+      - name: Run ShadowDiff Quality Gate
+        run: |
+          ./bin/shadowdiff gate \
+            -dashboard-url=http://localhost:8083 \
+            -min-parity=100.0 \
+            -min-requests=20 \
+            -allow-n-plus-one=false \
+            -allow-db-drift=false
+```
+
 ---
 
 ## 🛠️ Quickstart with Envoy & Docker Compose
